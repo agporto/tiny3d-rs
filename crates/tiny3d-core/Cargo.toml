@@ -1,0 +1,13 @@
+[package]
+name = "tiny3d-core"
+version = "2.0.0"
+edition = "2021"
+rust-version = "1.96"
+license = "MIT"
+description = "Core Rust implementation of the tiny3D point-cloud API"
+repository = "https://github.com/agporto/tiny3d-rs"
+homepage = "https://github.com/agporto/tiny3d-rs"
+readme = "../../README.md"
+
+[dependencies]
+rayon = "1.10"

@@ -1,0 +1,7 @@
+/target
+crates/tiny3d-py/dist/
+*.whl
+__pycache__/
+*.pyc
+.venv/
+venv/

@@ -1,0 +1,211 @@
+# Build + test + publish tiny3d-rs wheels on every GitHub release.
+#
+# Wheels: abi3 (one wheel covers CPython >= 3.9) for
+#   linux x86_64 / aarch64 (manylinux), macOS x86_64 / arm64, windows x64
+# plus an sdist.
+#
+# Publishing uses PyPI Trusted Publishing (OIDC, no token secret) —
+# see RELEASING.md for the one-time PyPI-side setup.
+
+name: Release
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch: {}   # manual run: builds + tests everything, skips publish
+
+permissions:
+  contents: read
+
+jobs:
+  licenses:
+    name: dependency licenses
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: EmbarkStudios/cargo-deny-action@v2
+        with:
+          command: check licenses
+
+  build:
+    name: wheel ${{ matrix.platform.name }}
+    runs-on: ${{ matrix.platform.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        platform:
+          - name: linux-x86_64
+            runner: ubuntu-24.04
+            target: x86_64
+          - name: linux-aarch64
+            runner: ubuntu-24.04-arm
+            target: aarch64
+          - name: macos-x86_64
+            runner: macos-15-intel   # last Intel macOS image (macos-13 was retired Dec 2025)
+            target: x86_64
+          - name: macos-arm64
+            runner: macos-latest
+            target: aarch64
+          - name: windows-x64
+            runner: windows-2022
+            target: x86_64
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build wheel
+        uses: PyO3/maturin-action@v1
+        with:
+          working-directory: crates/tiny3d-py
+          target: ${{ matrix.platform.target }}
+          manylinux: auto   # ignored for non-linux targets
+          rust-toolchain: 1.96.0
+          args: --release --locked --out dist
+      - uses: actions/upload-artifact@v4
+        with:
+          name: wheels-${{ matrix.platform.name }}
+          path: crates/tiny3d-py/dist/*.whl
+          if-no-files-found: error
+
+  sdist:
+    name: sdist
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build sdist
+        uses: PyO3/maturin-action@v1
+        with:
+          working-directory: crates/tiny3d-py
+          command: sdist
+          rust-toolchain: 1.96.0
+          args: --out dist
+      - uses: actions/upload-artifact@v4
+        with:
+          name: wheels-sdist
+          path: crates/tiny3d-py/dist/*.tar.gz
+          if-no-files-found: error
+
+  test:
+    name: test ${{ matrix.name }} py${{ matrix.python }}
+    needs: build
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # oldest supported + a current python per platform (abi3: one wheel serves all)
+          - { name: linux-x86_64,  runner: ubuntu-24.04,     python: '3.9',  golden: true }
+          - { name: linux-x86_64,  runner: ubuntu-24.04,     python: '3.13', golden: true }
+          - { name: linux-aarch64, runner: ubuntu-24.04-arm, python: '3.12', golden: false }
+          - { name: macos-x86_64,  runner: macos-15-intel,   python: '3.9',  golden: false }
+          - { name: macos-arm64,   runner: macos-latest,     python: '3.13', golden: false }
+          - { name: windows-x64,   runner: windows-2022,     python: '3.9',  golden: false }
+          - { name: windows-x64,   runner: windows-2022,     python: '3.13', golden: false }
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python }}
+      - uses: actions/download-artifact@v4
+        with:
+          name: wheels-${{ matrix.name }}
+          path: dist
+      - name: Install wheel
+        shell: bash
+        run: python -m pip install numpy "$(ls dist/*.whl)"
+      - name: Smoke test (functional, all platforms)
+        run: python golden/smoke.py
+      - name: Golden bit-exactness check (Linux x86_64 only)
+        if: matrix.golden
+        run: python golden/golden_gen.py check
+        env:
+          RAYON_NUM_THREADS: '2'
+      - name: Golden check, advisory (other platforms — libm may differ)
+        if: ${{ !matrix.golden }}
+        continue-on-error: true
+        run: python golden/golden_gen.py check
+
+  test-sdist:
+    name: test sdist
+    needs: sdist
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.9'
+      - name: Install pinned Rust toolchain
+        run: rustup toolchain install 1.96.0 --profile minimal
+      - uses: actions/download-artifact@v4
+        with:
+          name: wheels-sdist
+          path: dist
+      - name: Build and install from sdist
+        run: python -m pip install dist/*.tar.gz
+      - name: Smoke test installed sdist
+        run: python golden/smoke.py
+
+  package-check:
+    name: verify package metadata and notices
+    needs: [build, sdist]
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: wheels-*
+          path: dist
+          merge-multiple: true
+      - name: Validate package metadata and README rendering
+        run: |
+          python -m pip install twine
+          python -m twine check dist/*
+      - name: Verify license and notice contents
+        shell: python
+        run: |
+          import glob
+          import tarfile
+          import zipfile
+
+          wheels = glob.glob("dist/*.whl")
+          sdists = glob.glob("dist/*.tar.gz")
+          assert wheels and sdists, "expected wheels and an sdist"
+          for path in wheels:
+              with zipfile.ZipFile(path) as archive:
+                  names = archive.namelist()
+                  assert any(name.endswith(".dist-info/licenses/LICENSE") for name in names)
+                  assert any(name.endswith(".dist-info/licenses/THIRD_PARTY_NOTICES.md") for name in names)
+          with tarfile.open(sdists[0], "r:gz") as archive:
+              names = archive.getnames()
+              assert any(name.endswith("/LICENSE") for name in names)
+              assert any(name.endswith("/THIRD_PARTY_NOTICES.md") for name in names)
+              assert any(name.endswith("/README.md") for name in names)
+
+  publish:
+    name: publish to PyPI
+    if: github.event_name == 'release'
+    needs: [licenses, build, sdist, test, test-sdist, package-check]
+    runs-on: ubuntu-24.04
+    environment:
+      name: pypi
+      url: https://pypi.org/p/tiny3d-rs
+    permissions:
+      id-token: write   # required for PyPI Trusted Publishing (OIDC)
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check version matches release tag
+        shell: bash
+        run: |
+          tag="${GITHUB_REF_NAME#v}"
+          ver="$(python -c "import tomllib; print(tomllib.load(open('crates/tiny3d-py/pyproject.toml','rb'))['project']['version'])")"
+          if [ "$tag" != "$ver" ]; then
+            echo "Release tag ($GITHUB_REF_NAME) does not match pyproject version ($ver)"; exit 1
+          fi
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: wheels-*
+          path: dist
+          merge-multiple: true
+      - name: List distributions
+        run: ls -l dist/
+      - name: Publish
+        uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          packages-dir: dist

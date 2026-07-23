@@ -1,0 +1,20 @@
+[package]
+name = "tiny3d"
+version = "2.0.0"
+edition = "2021"
+rust-version = "1.96"
+license = "MIT"
+description = "Python bindings for the tiny3D-compatible Rust implementation"
+repository = "https://github.com/agporto/tiny3d-rs"
+homepage = "https://github.com/agporto/tiny3d-rs"
+readme = "README.md"
+publish = false
+
+[lib]
+name = "tiny3d_py"
+crate-type = ["cdylib"]
+
+[dependencies]
+tiny3d-core = { path = "../tiny3d-core" }
+pyo3 = { version = "0.23", features = ["extension-module", "abi3-py39"] }
+numpy = "0.23"

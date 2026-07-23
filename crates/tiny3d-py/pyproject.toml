@@ -1,0 +1,43 @@
+[build-system]
+requires = ["maturin>=1.5,<2.0"]
+build-backend = "maturin"
+
+[project]
+name = "tiny3d-rs"
+version = "2.0.0"
+description = "tiny3D point-cloud library — pure-Rust drop-in replacement for the C++ tiny3d package (imports as `tiny3d`)"
+readme = "README.md"
+license = "MIT"
+license-files = ["LICENSE", "THIRD_PARTY_NOTICES.md"]
+authors = [{ name = "Arthur Porto" }]
+requires-python = ">=3.9"
+dependencies = ["numpy>=1.18"]
+keywords = ["point-cloud", "3d", "geometry", "registration", "icp", "open3d"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Science/Research",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: POSIX :: Linux",
+    "Operating System :: MacOS",
+    "Operating System :: Microsoft :: Windows",
+    "Programming Language :: Rust",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3 :: Only",
+    "Programming Language :: Python :: Implementation :: CPython",
+    "Topic :: Scientific/Engineering",
+    "Topic :: Multimedia :: Graphics :: 3D Modeling",
+]
+
+[project.urls]
+Homepage = "https://github.com/agporto/tiny3d-rs"
+Source = "https://github.com/agporto/tiny3d-rs"
+Issues = "https://github.com/agporto/tiny3d-rs/issues"
+Upstream = "https://github.com/agporto/tiny3D"
+Changelog = "https://github.com/agporto/tiny3d-rs/blob/main/CHANGELOG.md"
+
+[tool.maturin]
+python-source = "python"
+module-name = "tiny3d.cpu.pybind"
+features = ["pyo3/extension-module"]
+include = ["THIRD_PARTY_NOTICES.md"]
+locked = true
