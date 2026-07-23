@@ -133,7 +133,7 @@ jobs:
         with:
           python-version: '3.9'
       - name: Install pinned Rust toolchain
-        run: rustup toolchain install 1.96.0 --profile minimal
+        run: rustup toolchain install 1.96.0 --profile minimal --component rustfmt --component clippy
       - uses: actions/download-artifact@v4
         with:
           name: wheels-sdist
