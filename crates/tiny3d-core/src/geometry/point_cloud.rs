@@ -526,9 +526,7 @@ impl PointCloud {
         orientation_reference: V3,
     ) -> Result<(), String> {
         if !self.has_normals() {
-            return Err(
-                "No normals in the PointCloud. Call EstimateNormals() first.".to_string(),
-            );
+            return Err("No normals in the PointCloud. Call EstimateNormals() first.".to_string());
         }
         for normal in self.normals.iter_mut() {
             if norm3(*normal) == 0.0 {
@@ -555,9 +553,7 @@ impl PointCloud {
         camera_location: V3,
     ) -> Result<(), String> {
         if !self.has_normals() {
-            return Err(
-                "No normals in the PointCloud. Call EstimateNormals() first.".to_string(),
-            );
+            return Err("No normals in the PointCloud. Call EstimateNormals() first.".to_string());
         }
         for (point, normal) in self.points.iter().zip(self.normals.iter_mut()) {
             let orientation_reference = [

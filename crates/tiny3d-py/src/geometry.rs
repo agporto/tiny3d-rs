@@ -636,10 +636,8 @@ impl PointCloud {
         cos_alpha_tol: f64,
     ) -> PyResult<()> {
         let inner = &mut self.inner;
-        py.allow_threads(|| {
-            inner.orient_normals_consistent_tangent_plane(k, lambda, cos_alpha_tol)
-        })
-        .map_err(PyRuntimeError::new_err)
+        py.allow_threads(|| inner.orient_normals_consistent_tangent_plane(k, lambda, cos_alpha_tol))
+            .map_err(PyRuntimeError::new_err)
     }
 }
 

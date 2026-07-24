@@ -127,7 +127,9 @@ pub fn orient_normals_consistent_tangent_plane(
             || (Vec::new(), Vec::new()),
             |(idx_buf, d2_buf), i| {
                 let cnt = kdtree.search_knn(&points[i], knn, idx_buf, d2_buf);
-                (0..cnt.max(0) as usize).map(|t| idx_buf[t] as usize).collect()
+                (0..cnt.max(0) as usize)
+                    .map(|t| idx_buf[t] as usize)
+                    .collect()
             },
         )
         .collect();
