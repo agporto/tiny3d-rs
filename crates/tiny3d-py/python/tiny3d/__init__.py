@@ -43,7 +43,7 @@ def _insert_pybind_names(skip_names=()):
 
 _insert_pybind_names()
 
-__version__ = "2.0.0"
+__version__ = "2.1.0"
 
 if int(sys.version_info[0]) < 3:
     raise Exception("tiny3d only supports Python 3.")
