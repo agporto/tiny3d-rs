@@ -43,6 +43,6 @@ fn pybind(py: Python<'_>, m: &Bound<'_, PyModule>) -> PyResult<()> {
         &registration_mod,
     )?;
 
-    m.add("__version__", "2.0.0")?;
+    m.add("__version__", "2.1.0")?;
     Ok(())
 }
