@@ -4,7 +4,7 @@ build-backend = "maturin"
 
 [project]
 name = "tiny3d-rs"
-version = "2.0.0"
+version = "2.1.0"
 description = "tiny3D point-cloud library — pure-Rust drop-in replacement for the C++ tiny3d package (imports as `tiny3d`)"
 readme = "README.md"
 license = "MIT"
