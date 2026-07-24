@@ -564,6 +564,83 @@ impl PointCloud {
         let inner = &mut self.inner;
         py.allow_threads(|| inner.estimate_normals(&param, fast_normal_computation));
     }
+
+    /// Function to orient the normals of a point cloud.
+    ///
+    /// Args:
+    ///     orientation_reference (numpy.ndarray[numpy.float64[3, 1]],
+    ///         optional, default=array([0., 0., 1.])): Normals are oriented
+    ///         with respect to orientation_reference.
+    ///
+    /// Returns:
+    ///     None
+    #[pyo3(signature = (orientation_reference = None))]
+    fn orient_normals_to_align_with_direction(
+        &mut self,
+        py: Python<'_>,
+        orientation_reference: Option<&Bound<'_, PyAny>>,
+    ) -> PyResult<()> {
+        let reference = match orientation_reference {
+            Some(v) => v3_from_any(v)?,
+            None => [0.0, 0.0, 1.0],
+        };
+        let inner = &mut self.inner;
+        py.allow_threads(|| inner.orient_normals_to_align_with_direction(reference))
+            .map_err(PyRuntimeError::new_err)
+    }
+
+    /// Function to orient the normals of a point cloud.
+    ///
+    /// Args:
+    ///     camera_location (numpy.ndarray[numpy.float64[3, 1]], optional,
+    ///         default=array([0., 0., 0.])): Normals are oriented with
+    ///         towards the camera_location.
+    ///
+    /// Returns:
+    ///     None
+    #[pyo3(signature = (camera_location = None))]
+    fn orient_normals_towards_camera_location(
+        &mut self,
+        py: Python<'_>,
+        camera_location: Option<&Bound<'_, PyAny>>,
+    ) -> PyResult<()> {
+        let camera = match camera_location {
+            Some(v) => v3_from_any(v)?,
+            None => [0.0, 0.0, 0.0],
+        };
+        let inner = &mut self.inner;
+        py.allow_threads(|| inner.orient_normals_towards_camera_location(camera))
+            .map_err(PyRuntimeError::new_err)
+    }
+
+    /// Function to consistently orient the normals of a point cloud based
+    /// on tangent planes.
+    ///
+    /// Args:
+    ///     k (int): Number of k nearest neighbors used in constructing the
+    ///         Riemannian graph used to propagate normal orientation.
+    ///     lambda (float, optional, default=0.0): penalty constant on the
+    ///         distance to the tangent plane.
+    ///     cos_alpha_tol (float, optional, default=1.0): treshold that
+    ///         defines the amplitude of the cone spanned by the reference
+    ///         normal.
+    ///
+    /// Returns:
+    ///     None
+    #[pyo3(signature = (k, lambda = 0.0, cos_alpha_tol = 1.0))]
+    fn orient_normals_consistent_tangent_plane(
+        &mut self,
+        py: Python<'_>,
+        k: usize,
+        lambda: f64,
+        cos_alpha_tol: f64,
+    ) -> PyResult<()> {
+        let inner = &mut self.inner;
+        py.allow_threads(|| {
+            inner.orient_normals_consistent_tangent_plane(k, lambda, cos_alpha_tol)
+        })
+        .map_err(PyRuntimeError::new_err)
+    }
 }
 
 // ---------------------------------------------------------------- AABB

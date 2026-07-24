@@ -1,5 +1,6 @@
 pub mod bounding_volume;
 pub mod mesh;
+pub mod orient_tangent_plane;
 pub mod point_cloud;
 pub mod rotation;
 pub mod search_param;

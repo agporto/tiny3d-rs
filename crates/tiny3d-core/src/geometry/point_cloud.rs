@@ -510,4 +510,164 @@ impl PointCloud {
             },
         );
     }
+
+    /// Open3D `PointCloud::OrientNormalsToAlignWithDirection`.
+    ///
+    /// Flips every normal whose dot product with `orientation_reference` is
+    /// negative. A zero-length normal is replaced by the reference vector
+    /// itself, un-normalized (upstream Open3D behavior).
+    ///
+    /// Errors when the cloud has no normals, mirroring upstream
+    /// `utility::LogError` (surfaced as a Python `RuntimeError` by the
+    /// bindings). Not present in the C++ tiny3d subset; semantics follow
+    /// upstream Open3D `PointCloud.cpp`.
+    pub fn orient_normals_to_align_with_direction(
+        &mut self,
+        orientation_reference: V3,
+    ) -> Result<(), String> {
+        if !self.has_normals() {
+            return Err(
+                "No normals in the PointCloud. Call EstimateNormals() first.".to_string(),
+            );
+        }
+        for normal in self.normals.iter_mut() {
+            if norm3(*normal) == 0.0 {
+                *normal = orientation_reference;
+            } else if dot3(*normal, orientation_reference) < 0.0 {
+                *normal = [-normal[0], -normal[1], -normal[2]];
+            }
+        }
+        Ok(())
+    }
+
+    /// Open3D `PointCloud::OrientNormalsTowardsCameraLocation`.
+    ///
+    /// Flips every normal so it points from its point towards
+    /// `camera_location`. A zero-length normal becomes the normalized
+    /// point→camera direction, or `[0, 0, 1]` when the point coincides with
+    /// the camera (upstream Open3D behavior).
+    ///
+    /// Errors when the cloud has no normals, mirroring upstream
+    /// `utility::LogError`. Not present in the C++ tiny3d subset; semantics
+    /// follow upstream Open3D `PointCloud.cpp`.
+    pub fn orient_normals_towards_camera_location(
+        &mut self,
+        camera_location: V3,
+    ) -> Result<(), String> {
+        if !self.has_normals() {
+            return Err(
+                "No normals in the PointCloud. Call EstimateNormals() first.".to_string(),
+            );
+        }
+        for (point, normal) in self.points.iter().zip(self.normals.iter_mut()) {
+            let orientation_reference = [
+                camera_location[0] - point[0],
+                camera_location[1] - point[1],
+                camera_location[2] - point[2],
+            ];
+            if norm3(*normal) == 0.0 {
+                if norm3(orientation_reference) == 0.0 {
+                    *normal = [0.0, 0.0, 1.0];
+                } else {
+                    // Eigen `normal.normalize()` divides by the norm.
+                    *normal = normalized3(orientation_reference);
+                }
+            } else if dot3(*normal, orientation_reference) < 0.0 {
+                *normal = [-normal[0], -normal[1], -normal[2]];
+            }
+        }
+        Ok(())
+    }
+
+    /// Open3D `PointCloud::OrientNormalsConsistentTangentPlane`.
+    ///
+    /// Hoppe '92 consistent orientation propagated over a Riemannian-graph
+    /// MST. See [`super::orient_tangent_plane`] for the algorithm and its
+    /// documented divergences from upstream (Delaunay-free Euclidean MST,
+    /// no IQR outlier exclusion for non-default `lambda`).
+    pub fn orient_normals_consistent_tangent_plane(
+        &mut self,
+        k: usize,
+        lambda: f64,
+        cos_alpha_tol: f64,
+    ) -> Result<(), String> {
+        super::orient_tangent_plane::orient_normals_consistent_tangent_plane(
+            self,
+            k,
+            lambda,
+            cos_alpha_tol,
+        )
+    }
+}
+
+#[cfg(test)]
+mod orient_tests {
+    use super::*;
+
+    fn cloud(points: Vec<V3>, normals: Vec<V3>) -> PointCloud {
+        PointCloud {
+            points,
+            normals,
+            colors: Vec::new(),
+        }
+    }
+
+    #[test]
+    fn align_flips_negative_dot_only() {
+        let mut pc = cloud(
+            vec![[0.0; 3]; 3],
+            vec![[0.0, 0.0, 1.0], [0.0, 0.0, -1.0], [1.0, 0.0, 0.0]],
+        );
+        pc.orient_normals_to_align_with_direction([0.0, 0.0, 1.0])
+            .unwrap();
+        assert_eq!(pc.normals[0], [0.0, 0.0, 1.0]);
+        assert_eq!(pc.normals[1], [0.0, 0.0, 1.0]);
+        // dot == 0 is NOT flipped (strict `< 0` comparison, Open3D-faithful).
+        assert_eq!(pc.normals[2], [1.0, 0.0, 0.0]);
+    }
+
+    #[test]
+    fn align_zero_normal_becomes_unnormalized_reference() {
+        let mut pc = cloud(vec![[0.0; 3]], vec![[0.0; 3]]);
+        pc.orient_normals_to_align_with_direction([0.0, 0.0, 2.0])
+            .unwrap();
+        // Upstream assigns the reference verbatim — no normalization.
+        assert_eq!(pc.normals[0], [0.0, 0.0, 2.0]);
+    }
+
+    #[test]
+    fn align_errors_without_normals() {
+        let mut pc = cloud(vec![[0.0; 3]], Vec::new());
+        assert!(pc
+            .orient_normals_to_align_with_direction([0.0, 0.0, 1.0])
+            .is_err());
+    }
+
+    #[test]
+    fn camera_flips_towards_camera() {
+        // Point below origin-camera, normal pointing away (down): must flip up.
+        let mut pc = cloud(
+            vec![[0.0, 0.0, -2.0], [1.0, 0.0, 0.0]],
+            vec![[0.0, 0.0, -1.0], [1.0, 0.0, 0.0]],
+        );
+        pc.orient_normals_towards_camera_location([0.0, 0.0, 0.0])
+            .unwrap();
+        assert_eq!(pc.normals[0], [0.0, 0.0, 1.0]);
+        // Normal pointing away from camera along +x flips to -x.
+        assert_eq!(pc.normals[1], [-1.0, 0.0, 0.0]);
+    }
+
+    #[test]
+    fn camera_zero_normal_cases() {
+        let mut pc = cloud(
+            vec![[0.0, 0.0, -2.0], [0.0, 0.0, 0.0]],
+            vec![[0.0; 3], [0.0; 3]],
+        );
+        pc.orient_normals_towards_camera_location([0.0, 0.0, 0.0])
+            .unwrap();
+        // Zero normal away from camera: normalized point→camera direction.
+        assert_eq!(pc.normals[0], [0.0, 0.0, 1.0]);
+        // Zero normal AT the camera: upstream fallback [0, 0, 1].
+        assert_eq!(pc.normals[1], [0.0, 0.0, 1.0]);
+    }
 }
